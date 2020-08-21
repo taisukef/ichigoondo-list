@@ -1,0 +1,119 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>IchigoOndo list</title>
+<meta property="og:image" content="ichigoondo2.png">
+<link rel="apple-touch-icon" href="ichigoondo2.png">
+<meta name="viewport" content="width=device-width">
+<meta name="format-detection" content="telephone=no">
+<script type="module">
+
+window.onload = async () => {
+  const tokens = await (await fetch("ichigoondo-settings.json")).json();
+
+  const cr = (tag) => document.createElement(tag);
+  list.style.display = "grid";
+  list.style.gridTemplateColumns = "1fr 1fr 1fr 1fr 1fr";
+  for (const c of ["", "温度", "湿度", "WBGT", "水分量"]) {
+    const div = cr("div");
+    div.textContent = c;
+    list.appendChild(div);
+  }
+  for (const c of tokens) {
+    const a = cr("a");
+    a.textContent = c.name;
+    a.href = c.link;
+    list.appendChild(a);
+
+    const data = await fetchDataLatest(c, 1);
+    console.log(c, data);
+    for (const name of [["t", "℃"], ["h", "%"], ["wbgt", "℃"], ["water", "g/m<sup>3</sup>"]]) {
+      const div = cr("div");
+      div.innerHTML = `${data[name[0]].toFixed(2)}<small>${name[1]}</small>`;
+      list.appendChild(div);
+    }
+  }
+
+  const reloadevery = 5 * 60 * 1000; // 5min
+  setTimeout(() => location.reload(), reloadevery);
+};
+
+const fetchDataLatest = async (token) => {
+  const data = await fetchDataStore(token, 1);
+  return calcData(data[0].value);
+};
+
+const fetchDataStore = async (token, maxsize = 2000) => {
+  const baseurl = `https://api.sakura.io/datastore/v2/channels?token=${token.token}&module=${token.module}&channel=${token.ch || 0}`;
+  const url = baseurl + "&limit=" + maxsize;
+  const data = await (await fetch(url)).json();
+  const items = data.results;
+  return items;
+};
+
+const calcData = (value) => {
+  const t0 = parseInt(value.substring(0, 4), 16);
+  const t = (((17500 * t0) >> 16) - 4500) / 100;
+
+  const h0 = parseInt(value.substring(6, 6 + 4), 16);
+  const h = ((10000 * h0) >> 16) / 100;
+  
+  const wbgt = calcWBGT(t, h);
+  const water = calcWater(t, h);
+  return { t, h, wbgt, water };
+};
+
+const calcWBGT = (t, h) => {
+	const sr = 0;
+	const ws = 0;
+	const wbgt = 0.735 * t + 0.0374 * h + 0.00292 * t * h + 7.619 * sr - 4.557 * sr * sr - 0.0572 * ws - 4.064;
+	return wbgt;
+};
+
+// 飽和水蒸気量から、水蒸気量算出
+// https://ja.wikipedia.org/wiki/%E9%A3%BD%E5%92%8C%E6%B0%B4%E8%92%B8%E6%B0%97%E9%87%8F
+// https://enechange.jp/articles/humidity-100-per-cent
+const calcWater = (t, h) => { // g/m3
+	const e = 6.1078 * Math.pow(10, 7.5 * t / (t + 237.3)); // hPa
+	const a = 217 * e / (t + 273.15); // g/m3
+	return a * h / 100;
+};
+
+</script>
+<style>
+body {
+	margin: 1em;
+	text-align: center;
+	font-family: sans-serif;
+}
+h1 {
+	padding: 0px 5px;
+	margin: 1em;
+}
+#list {
+	font-size: 3vw;
+  margin: 2vh 2vw;
+  line-height: 1.6em;
+	display: inline-block;
+}
+small {
+	font-size: 90%;
+}
+.credit {
+	margin-top: 1em;
+}
+a {
+	color: gray !important;
+}
+</style>
+</head>
+<body>
+
+<h1>IchigoOndo list</h1>
+
+<div id="list"></div>
+
+<div class="credit">
+  APP: CC BY <a href="https://fukuno.jig.jp/2949">福野泰介の一日一創</a>
+</div>
+
+</body>
+</html>
